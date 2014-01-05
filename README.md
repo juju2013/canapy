@@ -1,4 +1,6 @@
-pycontrol
+cana.py
 =========
 
-python user input control daemon
+Controls from android device and canapé.
+
+Compatible with client ultimate control
