@@ -3,7 +3,8 @@
 import struct
 import utils
 import binascii
-import autopy
+
+import pymouse
 
 KEY_CTRL = 0;
 KEY_SHFT = 1;
@@ -13,6 +14,7 @@ KEY_CMD = 4;
 MOUSE_BTN1 = 0;
 MOUSE_BTN2 = 1;
 MOUSE_BTN3 = 2;
+pm=pymouse.PyMouse()
 
 class ucmsg(object):
 	id=None
@@ -48,43 +50,45 @@ class msgAgentInfoResponse(ucmsg):
 
 class msgBtn:
 	state=False
-	def __init__(self,btn, btn2):
+	def __init__(self,btn, idx):
 		self.ucbtn=btn
-		self.apbtn=btn2
+		self.idx=idx
 
-	def ifclick(self, msg):
+	def click(self, msg):
 		newstate=((msg[2]&self.ucbtn)==self.ucbtn)
 		if self.state != newstate:
 			self.state=newstate
-			autopy.mouse.toggle(newstate, self.apbtn)
+			x,y=pm.position()
+			if newstate: pm.press(x,y, self.idx)
+			else: pm.release(x,y,self.idx)
+			self.state=newstate
 
-	def btnstat(self,btn):
-		if btn: return "down"
-		return "up"
+btns=[msgBtn(0b0001, 1), msgBtn(0b0010, 3), msgBtn(0b0100, 2)]
+lastScroll=0
 
 class msgMouse(ucmsg):
 	id='\x10\x10'
-	btn1=msgBtn(0b0001, autopy.mouse.LEFT_BUTTON)
-	btn2=msgBtn(0b0010, autopy.mouse.CENTER_BUTTON)
-	btn3=msgBtn(0b0100, autopy.mouse.RIGHT_BUTTON)
 
-	def response(self): 
-		dx,dy=self.detail()
+	def response(self):
+		dx,dy, dw=self.detail()
 		if dx*dy !=0 :
-			x,y=autopy.mouse.get_pos()
-			try: autopy.mouse.move(mx(x,dx), my(y,dy))
-			except: 
-				print "cannot move to p(%s,%s)"%(x+dx, y+dy)
-				pass
-		self.btn1.ifclick(self.msg)
-		self.btn2.ifclick(self.msg)
-		self.btn3.ifclick(self.msg)
+			x,y=pm.position()
+			pm.move(x+dx, y+dy)
+		for b in btns: b.click(self.msg)
+		pm.scroll(vertical=dw)
 
 	def detail(self):
 		dx=normalize(struct.unpack("!i", self.msg[4:8])[0])
 		dy=normalize(struct.unpack("!i", self.msg[8:12])[0])
-		dw=normalize(struct.unpack("!i", self.msg[12:16])[0])
-		return (dx,dy)
+		dw=normalize(struct.unpack("!i", self.msg[12:16])[0]/4)
+		if dw != 0:
+			global lastScroll
+			if dw != lastScroll:
+				dw=dw/abs(dw)
+				lastScroll=dw
+			else: dw=0
+		return (dx,dy, dw)
+
 
 class msgAgentInfo(ucmsg):
 	id='\x20\x20'
@@ -104,5 +108,3 @@ def getMsg(msg):
 	return m
 
 def normalize(i): return max(min(i,100),-100)
-def mx(x, dx): return min(max(x+dx, 0), autopy.screen.get_size()[0])
-def my(x, dx): return min(max(x+dx, 0), autopy.screen.get_size()[1])

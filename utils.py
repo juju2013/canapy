@@ -22,3 +22,4 @@ class exitQueue(Borg):
 				self._queue.put_nowait(true)
 			except:
 				break
+				
